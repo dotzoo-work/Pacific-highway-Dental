@@ -8,8 +8,18 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import openai
 from pinecone import Pinecone
+import pinecone
 from loguru import logger
 import tiktoken
+try:
+    import boto3
+except ImportError:
+    boto3 = None
+import json
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 @dataclass
 class RetrievedChunk:
@@ -23,19 +33,184 @@ class RetrievedChunk:
 class AdvancedRAGPipeline:
     """Enhanced RAG system using OpenAI embeddings for retrieval and ranking"""
 
-    def __init__(self, openai_client, pinecone_api_key: str, index_name: str = "rag-index"):
+    def __init__(self, openai_client, pinecone_api_key: str, index_name: str = "pacific-highway-dental"):
         self.openai_client = openai_client
         self.pc = Pinecone(api_key=pinecone_api_key)
+        self.index_name = index_name
+        
+        # Check if index exists, create if not
+        self._ensure_index_exists()
         self.index = self.pc.Index(index_name)
+        
+        # Load data from S3 if index is empty
+        self._load_data_if_empty()
 
         # Token counter for context management
         self.encoding = tiktoken.encoding_for_model("gpt-4o-mini")
-        self.max_context_tokens = 3000
+        self.max_context_tokens = 5000
         
         # FAQ context
         self.faq_context = self._get_faq_context()
 
         logger.info("Advanced RAG Pipeline initialized with OpenAI embeddings and FAQ context")
+    
+    def check_vector_db_status(self):
+        """Check vector database status and content"""
+        try:
+            stats = self.index.describe_index_stats()
+            logger.info(f"Vector DB Status:")
+            logger.info(f"- Total vectors: {stats['total_vector_count']}")
+            logger.info(f"- Dimension: {stats.get('dimension', 'Unknown')}")
+            
+            if stats['total_vector_count'] > 0:
+                # Test query to see sample data
+                test_results = self.index.query(
+                    vector=[0.0] * 1536,  # Dummy vector
+                    top_k=3,
+                    include_metadata=True
+                )
+                logger.info(f"Sample data in vector DB:")
+                for i, match in enumerate(test_results['matches']):
+                    source = match['metadata'].get('source', 'Unknown')
+                    text_preview = match['metadata'].get('text', '')[:100]
+                    logger.info(f"  {i+1}. Source: {source}, Preview: {text_preview}...")
+            
+            return stats['total_vector_count']
+        except Exception as e:
+            logger.error(f"Error checking vector DB status: {e}")
+            return 0
+    
+    def _ensure_index_exists(self):
+        """Check if Pinecone index exists, create if not found"""
+        try:
+            existing_indexes = self.pc.list_indexes().names()
+            if self.index_name not in existing_indexes:
+                logger.info(f"Index '{self.index_name}' not found. Creating new index...")
+                self.pc.create_index(
+                    name=self.index_name,
+                    dimension=1536,  # OpenAI text-embedding-3-small dimension
+                    metric="cosine",
+                    spec=pinecone.ServerlessSpec(
+                        cloud="aws",
+                        region="us-east-1"
+                    )
+                )
+                logger.info(f"Index '{self.index_name}' created successfully!")
+            else:
+                logger.info(f"Index '{self.index_name}' already exists.")
+        except Exception as e:
+            logger.error(f"Error ensuring index exists: {e}")
+            raise
+    
+    def _load_data_if_empty(self):
+        """Load data from S3 if vector database is empty"""
+        try:
+            # Check if index has data
+            stats = self.index.describe_index_stats()
+            if stats['total_vector_count'] == 0:
+                logger.info("Vector database is empty. Loading data from S3...")
+                self.load_s3_data()
+            else:
+                logger.info(f"Vector database has {stats['total_vector_count']} vectors")
+        except Exception as e:
+            logger.error(f"Error checking index stats: {e}")
+    
+    def load_s3_data(self, bucket_name: str = "pacific-dental", key_prefix: str = ""):
+        """Load and embed data from S3 bucket"""
+        try:
+            if boto3 is None:
+                logger.warning("boto3 not available. Skipping S3 data loading.")
+                return
+                
+            # Check if AWS credentials are available
+            aws_key = os.getenv('AWS_ACCESS_KEY_ID')
+            aws_secret = os.getenv('AWS_SECRET_ACCESS_KEY')
+            
+            if not aws_key or not aws_secret:
+                logger.warning("AWS credentials not found. Skipping S3 data loading.")
+                return
+            
+            logger.info(f"Using AWS Access Key: {aws_key[:10]}...")
+            
+            s3 = boto3.client(
+                's3',
+                aws_access_key_id=aws_key,
+                aws_secret_access_key=aws_secret,
+                region_name=os.getenv('AWS_REGION', 'us-east-1')
+            )
+            
+            # List objects in S3 bucket
+            response = s3.list_objects_v2(Bucket=bucket_name, Prefix=key_prefix)
+            
+            if 'Contents' not in response:
+                logger.warning(f"No files found in S3 bucket {bucket_name} with prefix {key_prefix}")
+                return
+            
+            vectors_to_upsert = []
+            
+            for obj in response['Contents']:
+                key = obj['Key']
+                if key.endswith('.txt') or key.endswith('.json'):
+                    logger.info(f"Processing file: {key}")
+                    
+                    # Download file content
+                    file_obj = s3.get_object(Bucket=bucket_name, Key=key)
+                    content = file_obj['Body'].read().decode('utf-8')
+                    
+                    # Split content into chunks
+                    chunks = self._split_text(content, key)
+                    
+                    # Create embeddings and prepare for upsert
+                    for i, chunk in enumerate(chunks):
+                        embedding = self._create_embedding(chunk)
+                        vector_id = f"{key}_{i}"
+                        
+                        vectors_to_upsert.append({
+                            'id': vector_id,
+                            'values': embedding,
+                            'metadata': {
+                                'text': chunk,
+                                'source': key,
+                                'chunk_index': i
+                            }
+                        })
+            
+            # Upsert vectors in batches
+            if vectors_to_upsert:
+                batch_size = 100
+                for i in range(0, len(vectors_to_upsert), batch_size):
+                    batch = vectors_to_upsert[i:i + batch_size]
+                    self.index.upsert(vectors=batch)
+                    logger.info(f"Upserted batch {i//batch_size + 1}")
+                
+                logger.info(f"Successfully loaded {len(vectors_to_upsert)} vectors from S3")
+            
+        except Exception as e:
+            logger.error(f"Error loading data from S3: {e}")
+    
+    def _split_text(self, text: str, source: str, chunk_size: int = 1000) -> List[str]:
+        """Split text into chunks for embedding"""
+        chunks = []
+        words = text.split()
+        
+        for i in range(0, len(words), chunk_size):
+            chunk = ' '.join(words[i:i + chunk_size])
+            if chunk.strip():
+                chunks.append(chunk.strip())
+        
+        return chunks
+    
+    def _create_embedding(self, text: str) -> List[float]:
+        """Create embedding for text using OpenAI"""
+        try:
+            response = self.openai_client.embeddings.create(
+                model="text-embedding-3-small",
+                input=text
+            )
+            return response.data[0].embedding
+        except Exception as e:
+            logger.error(f"Error creating embedding: {e}")
+            return []
     
     def enhanced_retrieval(
         self,
@@ -147,8 +322,8 @@ class AdvancedRAGPipeline:
         medical_terms = ['tooth', 'dental', 'pain', 'treatment', 'procedure', 'diagnosis']
         medical_boost = sum(0.05 for term in medical_terms if term in content_lower)
 
-        # Boost for Dr. Meenakshi specific content
-        doctor_terms = ['meenakshi', 'tomar', 'edmonds', 'laser', 'wcli']
+        # Boost for doctor specific content
+        doctor_terms = ['meenakshi', 'tomar', 'sweetu', 'patel', 'dds', 'dmd', 'kent', 'pacific highway', 'laser', 'wcli']
         doctor_boost = sum(0.1 for term in doctor_terms if term in content_lower)
 
         total_boost = exact_match_boost + medical_boost + doctor_boost
@@ -162,13 +337,13 @@ FREQUENTLY ASKED QUESTIONS (FAQ):
 
 
 Q. Can you schedule an appointment for me? 
-A. Unfortunately, I cannot book an appointment directly. Please call our clinic at (425) 775-5162 and our team will be happy to help you with scheduling.
+A. Unfortunately, I cannot book an appointment directly. Please call our clinic at (253) 529-9434 and our team will be happy to help you with scheduling.
 
 
 
 
 Q. Do you accept Bitcoin? 
-A. Edmonds Bay Dental does not accept Bitcoin. We accept cash, all major credit cards, and insurance.
+A. Pacific Highway Dental does not accept Bitcoin. We accept cash, all major credit cards, and insurance.
 
 Q. Do you offer laughing gas? 
 A. Dr. Tomar does not use laughing gas. Instead, she uses single anesthesia to ensure comfort during procedures.
@@ -183,13 +358,13 @@ Q. Do you treat toddlers?
 A. Yes, Dr. Tomar treats toddlers. Please contact our clinic for specific details and to schedule an appointment.
 
 Q. Do you have a hygienist? 
-A. Edmonds Bay Dental does not have a hygienist. Instead, Dr. Tomar is supported by highly qualified dental assistants personally recommended by him, ensuring comprehensive and reliable dental care.
+A. Pacific Highway Dental does not have a hygienist. Instead, Dr. Tomar is supported by highly qualified dental assistants personally recommended by him, ensuring comprehensive and reliable dental care.
 
 Q. Do you accept Medicare? 
-A. Edmonds Bay Dental does not participate in Medicare insurance plans. Please contact our clinic to learn about our in-house plans and options.
+A. Pacific Highway Dental does not participate in Medicare insurance plans. Please contact our clinic to learn about our in-house plans and options.
 
 Q. Do you accept Apple Health? 
-A. Edmonds Bay Dental does not participate in Apple Health plans. Please contact our clinic to learn about our in-house plans and options.
+A. Pacific Highway Dental does not participate in Apple Health plans. Please contact our clinic to learn about our in-house plans and options.
 
 Q. Do you offer free coffee at your clinic? 
 A. We do not offer free coffee, but we do our best to make your visit as comfortable as possible.
@@ -197,10 +372,11 @@ A. We do not offer free coffee, but we do our best to make your visit as comfort
 Q. Can I use the bathroom at your clinic? 
 A. Our facilities are reserved for patients with appointments.
 
-Q. Do you have another dental location? 
-A. Yes. Dr. Tomar also practices at Pacific Highway Dental Clinic.Location -27020 Pacific Highway South, Suite C,
+Q. Who are the doctors at Pacific Highway Dental?
+A. We have two experienced doctors: Dr. Meenakshi Tomar, DDS and Dr. Sweetu Patel, DMD. Both doctors provide comprehensive dental care with expertise in various dental procedures.
 
-Kent, WA 98032. Please contact the clinic for exact address and hours.
+Q. Do you have another dental location? 
+A. Yes. Dr. Tomar also practices at Edmonds Bay Dental Clinic. Location - 51 W Dayton Street Suite 301, Edmonds, WA 98020. Please contact the clinic for exact address and hours.
 """
     
     def context_optimization(self, chunks: List[RetrievedChunk], query: str) -> str:

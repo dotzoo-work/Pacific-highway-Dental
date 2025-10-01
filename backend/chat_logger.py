@@ -2,7 +2,7 @@
 Chat Logger for Advanced AI Dental Chatbot
 Logs all chat interactions with detailed metadata for analysis
 """
-
+#
 import os
 import json
 from datetime import datetime

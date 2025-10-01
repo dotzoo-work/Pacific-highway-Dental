@@ -101,7 +101,7 @@ jobs:
             -e ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}" \
             -e ENVIRONMENT="production" \
             -e PORT="8000" \
-            -p 8000:8000 \
+            -p 8001:8000 \
             "${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO }}:latest"
 
       - name: Prune old Docker images on EC2

@@ -24,8 +24,8 @@ class S3DataManager:
             region_name=os.getenv('AWS_REGION', 'us-east-1')
         )
         
-        self.bucket_name = os.getenv('S3_BUCKET_NAME', 'dental-chatbot-data')
-        self.data_prefix = 'crawled_data/'  # S3 folder for text files
+        self.bucket_name = os.getenv('S3_BUCKET_NAME', 'pacific-dental ')
+        self.data_prefix = 'pacific-highway-dental.txt/'  # S3 folder for text files
         
         # Vector database client
         self.orchestrator = orchestrator

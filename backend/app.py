@@ -30,7 +30,7 @@ logger.add("logs/chatbot.log", rotation="1 day", retention="7 days", level="INFO
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Dr. Meenakshi Tomar Dental Chatbot API",
+    title="Pacific Highway Dental Chatbot API",
     description="AI-powered dental consultation API",
     version="1.0.0"
 )
@@ -251,6 +251,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
-        port=int(os.getenv("PORT", 8000)),
+        port=int(os.getenv("PORT", 8001)),
         reload=False
     )

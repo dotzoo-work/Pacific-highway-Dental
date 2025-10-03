@@ -112,3 +112,9 @@ jobs:
       - name: Debug SendGrid Key inside container (optional)
         run: |
           docker exec dental-chatbot printenv SENDGRID_API_KEY | od -c
+
+
+      - name: Reload Nginx
+        run: |
+          echo "🔄 Reloading Nginx..."
+          sudo systemctl reload nginx || sudo systemctl restart nginx

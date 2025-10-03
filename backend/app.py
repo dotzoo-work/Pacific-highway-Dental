@@ -39,7 +39,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://www.edmondsbaydental.com"],  # Allow all origins for deployment
+    allow_origins=["https://www.pacifichighwaydental.com"],  # Allow all origins for deployment
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

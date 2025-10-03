@@ -2,7 +2,7 @@
 Backend API for Dr. Meenakshi Tomar Dental Chatbot
 Minimal FastAPI server for deployment
 """
-# helloupdate
+# helloupdatehi
 
 import os
 import uuid

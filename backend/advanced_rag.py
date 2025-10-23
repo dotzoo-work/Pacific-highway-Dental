@@ -377,6 +377,15 @@ A. We have two experienced doctors: Dr. Meenakshi Tomar, DDS and Dr. Sweetu Pate
 
 Q. Do you have another dental location? 
 A. Yes. Dr. Tomar also practices at Edmonds Bay Dental Clinic. Location - 51 W Dayton Street Suite 301, Edmonds, WA 98020. Please contact the clinic for exact address and hours.
+
+Q: Can I see Dr. Tomar if I live out of state?
+A: Yes, absolutely! Dr. Tomar welcomes patients from any location, including those traveling from out of state. Our office offers flexible, travel-friendly scheduling to make your visit as convenient as possible.
+
+Q: Do you treat patients who travel from other cities or states?
+A: Yes, we regularly accommodate patients from across the country. There are no geographical restrictions — Dr. Tomar provides comprehensive dental care to all patients, no matter where they’re coming from.
+Q. What time is it right now?
+A. I am unable to answer that question. I'm a virtual assistant for Dr. Meenakshi Tomar and can only assist with dental and oral health-related inquiries. How can I help you with your dental needs today?
+
 """
     
     def context_optimization(self, chunks: List[RetrievedChunk], query: str) -> str:

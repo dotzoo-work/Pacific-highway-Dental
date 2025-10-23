@@ -542,6 +542,17 @@ class QueryClassifier:
     def classify_query(self, user_question: str, openai_client=None) -> QueryType:
         """AI-powered query classification"""
         
+        # Quick check for patterns that should be GENERAL
+        q = user_question.lower().strip()
+        time_patterns = ['what time is it', "what's the time", 'current time', 'time now']
+        out_of_state_patterns = ['out of state', 'live out of state', 'from another state', 'different state', 'another country', 'live in', 'from out of state']
+        
+        if any(pattern in q for pattern in time_patterns):
+            return QueryType.GENERAL  # Will be caught as out-of-context later
+        
+        if any(pattern in q for pattern in out_of_state_patterns):
+            return QueryType.GENERAL  # Out-of-state questions are general info
+        
         client = openai_client or self.client
         if not client:
             # Fallback to general if no OpenAI client
@@ -553,15 +564,17 @@ Analyze this dental consultation question and classify it into ONE category.
 
 User Question: "{user_question}"
 
+IMPORTANT: If the question is asking for current time ("what time is it", "what's the time", "current time"), classify as GENERAL (it will be handled as out-of-context).
+
 Categories:
 - DIAGNOSIS: Questions about symptoms, pain, problems, "what's wrong", identifying conditions
 - TREATMENT: Questions about fixing problems, treatment options, procedures, "how to treat"
 - PREVENTION: Questions about preventing problems, oral hygiene, care tips, maintenance
 - EMERGENCY: Urgent situations, severe pain, trauma, infections, "can't sleep", swelling, "emergency appointment", "need to see doctor today", "urgent care", "emergency"
 - PROCEDURE: Questions about specific dental procedures, surgeries, implants, crowns
-- SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open", "when do you open next", "next appointment", "when are you open next"
+- SCHEDULING: Appointment booking, office hours, availability, "can you see me", "are you open", "when do you open next", "next appointment", "when are you open next" (BUT NOT time queries like "what time is it")
 - COST: Questions about pricing, fees, insurance, "how much does it cost"
-- GENERAL: Simple definitions, basic information, general dental questions, location questions ("another location", "second location", "other locations", "do you have another location")
+- GENERAL: Simple definitions, basic information, general dental questions, location questions ("another country", "live out of state", "out of state", "any location", "another location", "second location", "other locations", "do you have another location"), patient eligibility questions, and time queries
 
 Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
 """
@@ -587,7 +600,13 @@ Respond with ONLY the category name (e.g., SCHEDULING, DIAGNOSIS, etc.):
                 "GENERAL": QueryType.GENERAL
             }
             
-            return type_mapping.get(result, QueryType.GENERAL)
+            classified_type = type_mapping.get(result, QueryType.GENERAL)
+            
+            # Double-check for patterns that should be GENERAL
+            if classified_type == QueryType.SCHEDULING and (any(pattern in q for pattern in time_patterns) or any(pattern in q for pattern in out_of_state_patterns)):
+                return QueryType.GENERAL
+            
+            return classified_type
             
         except Exception as e:
             # Fallback to general on error

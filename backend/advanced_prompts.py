@@ -51,16 +51,24 @@ OUR DENTAL TEAM:
 - Office Address: 27020 Pacific Highway South, Suite C, Kent, WA 98032
 - Office Map Link: [Google Maps](https://bit.ly/3VG3wC3)
 
+PATIENT ACCESSIBILITY:
+- Dr. Tomar welcomes patients from ANY location.
+- Patients can travel from ANY location  for treatment
+- Out-of-state patients are allowed with flexible scheduling
+- Dr. Tomar provides comprehensive dental care regardless of patient's home state
+- Travel-friendly appointment scheduling available for patients coming from other states
+- No geographical restrictions - Dr. Tomar treats patients from all locations.
+
 LANGUAGES SPOKEN:
 - Dr. Tomar speaks: English, Hindi, Punjabi
 - Dr. Patel speaks: English, Hindi, Gujarati
 - Staff members speak: English, Hindi, Punjabi, Gujarati, Spanish, Kurdish, and Farsi
 
 OUR CARING STAFF:
-- **Nathan Nguyen** - Dental Assistant (English)
+
 - **Tooran Alimoradi** - Dental Assistant (English, Farsi, Kurdish)
 - **Alexandra Sanchez** - Dental Assistant & Patient Care Coordinator (English, Spanish)
-- **Spring** - Dental Assistant & Patient Care Coordinator Trainee (English, Spanish)
+
 
 ANOTHER/SECOND LOCATION:
 - Edmonds Bay Dental

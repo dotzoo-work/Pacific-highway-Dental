@@ -1,3 +1,9 @@
+all projectin apps 
+use cd to to choose special project
+ex- cd apps, cd voice-backned, cd backend
+
+
+
 FINAL FLOW
 
 GitHub (code)
